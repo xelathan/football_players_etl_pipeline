@@ -1,0 +1,205 @@
+{
+    "get": "players",
+    "parameters": {
+        "league": "39",
+        "season": "2021"
+    },
+    "errors": [],
+    "results": 3,
+    "paging": {
+        "current": 2,
+        "total": 2
+    },
+    "response": [
+        {
+            "player": {
+                "id": 926,
+                "name": "R. Sterling",
+                "firstname": "Raheem",
+                "lastname": "Sterling",
+                "age": 26,
+                "birth": {
+                    "date": "1994-12-08",
+                    "place": "Kingston",
+                    "country": "Jamaica"
+                },
+                "nationality": "Jamaica",
+                "height": "170 cm",
+                "weight": "69 kg",
+                "injured": false,
+                "photo": "https://media.api-sports.io/football/players/926.png"
+            },
+            "statistics": [
+                {
+                    "team": {
+                        "id": 50,
+                        "name": "Manchester City",
+                        "logo": "https://media.api-sports.io/football/teams/50.png"
+                    },
+                    "league": {
+                        "id": 39,
+                        "name": "Premier League",
+                        "country": "England",
+                        "logo": "https://media.api-sports.io/football/leagues/39.png",
+                        "flag": "https://media.api-sports.io/flags/gb.svg",
+                        "season": 2021
+                    },
+                    "games": {
+                        "appearences": 26,
+                        "lineups": 25,
+                        "minutes": 2200,
+                        "number": 7,
+                        "position": "Forward",
+                        "rating": "8.2",
+                        "captain": false
+                    },
+                    "substitutes": {
+                        "in": 3,
+                        "out": 4,
+                        "bench": 2
+                    },
+                    "shots": {
+                        "total": 55,
+                        "on": 30
+                    },
+                    "goals": {
+                        "total": 18,
+                        "conceded": null,
+                        "assists": 10,
+                        "saves": null
+                    },
+                    "passes": {
+                        "total": 850,
+                        "key": 35,
+                        "accuracy": "82%"
+                    },
+                    "tackles": {
+                        "total": 5,
+                        "blocks": 2,
+                        "interceptions": 4
+                    },
+                    "duels": {
+                        "total": 75,
+                        "won": 40
+                    },
+                    "dribbles": {
+                        "attempts": 50,
+                        "success": 30,
+                        "past": null
+                    },
+                    "fouls": {
+                        "drawn": 10,
+                        "committed": 6
+                    },
+                    "cards": {
+                        "yellow": 2,
+                        "yellowred": 1,
+                        "red": 0
+                    },
+                    "penalty": {
+                        "won": 3,
+                        "commited": 0,
+                        "scored": 3,
+                        "missed": 0,
+                        "saved": 0
+                    }
+                }
+            ]
+        },
+        {
+            "player": {
+                "id": 1000,
+                "name": "B. Silva",
+                "firstname": "Bernardo",
+                "lastname": "Silva",
+                "age": 27,
+                "birth": {
+                    "date": "1994-08-10",
+                    "place": "Lisbon",
+                    "country": "Portugal"
+                },
+                "nationality": "Portugal",
+                "height": "173 cm",
+                "weight": "67 kg",
+                "injured": false,
+                "photo": "https://media.api-sports.io/football/players/1000.png"
+            },
+            "statistics": [
+                {
+                    "team": {
+                        "id": 50,
+                        "name": "Manchester City",
+                        "logo": "https://media.api-sports.io/football/teams/50.png"
+                    },
+                    "league": {
+                        "id": 39,
+                        "name": "Premier League",
+                        "country": "England",
+                        "logo": "https://media.api-sports.io/football/leagues/39.png",
+                        "flag": "https://media.api-sports.io/flags/gb.svg",
+                        "season": 2021
+                    },
+                    "games": {
+                        "appearences": 25,
+                        "lineups": 22,
+                        "minutes": 1900,
+                        "number": 20,
+                        "position": "Midfielder",
+                        "rating": "8.2",
+                        "captain": false
+                    },
+                    "substitutes": {
+                        "in": 5,
+                        "out": 2,
+                        "bench": 3
+                    },
+                    "shots": {
+                        "total": 40,
+                        "on": 18
+                    },
+                    "goals": {
+                        "total": 8,
+                        "conceded": null,
+                        "assists": 12,
+                        "saves": null
+                    },
+                    "passes": {
+                        "total": 1400,
+                        "key": 30,
+                        "accuracy": "85%"
+                    },
+                    "tackles": {
+                        "total": 10,
+                        "blocks": 2,
+                        "interceptions": 7
+                    },
+                    "duels": {
+                        "total": 70,
+                        "won": 45
+                    },
+                    "dribbles": {
+                        "attempts": 30,
+                        "success": 18,
+                        "past": null
+                    },
+                    "fouls": {
+                        "drawn": 10,
+                        "committed": 8
+                    },
+                    "cards": {
+                        "yellow": 2,
+                        "yellowred": 0,
+                        "red": 0
+                    },
+                    "penalty": {
+                        "won": 1,
+                        "commited": 0,
+                        "scored": 1,
+                        "missed": 0,
+                        "saved": 0
+                    }
+                }
+            ]
+        }
+    ]
+}
