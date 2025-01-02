@@ -1,6 +1,6 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.providers.amazon.aws.operators.emr import EmrServerlessOperator
+from airflow.providers.amazon.aws.operators.emr import EmrServerlessCreateApplicationOperator, EmrServerlessStartJobOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -11,13 +11,8 @@ import pandas as pd
 
 file_path = "/opt/airflow/mock/mock_football_players"
 
-league_ids = [
-    39, # Premier League
-    140, # La Liga
-    78, # Serie A
-    61, # Ligue 1
-    135, # Bundesliga
-]
+with open("/opt/airflow/config/football_players_data_config.json", 'r') as f:
+    config = json.load(f)
 
 
 def extract_from_football_api(**kwargs):
@@ -25,7 +20,7 @@ def extract_from_football_api(**kwargs):
 
     players_df = pd.DataFrame()
 
-    for league_id in league_ids:
+    for league_id in config["LEAGUE_IDS"]:
         pagination = 1
         while True:
             try:
@@ -76,14 +71,14 @@ def extract_from_football_api(**kwargs):
 
 def store_to_unprocessed_data_s3(**kwargs):
     ti = kwargs['ti']
+    current_timestamp = kwargs['time_started']
+
     players_df = pd.DataFrame(ti.xcom_pull(task_ids='extract_from_football_api'))
 
     logging.info(f"Storing {players_df.shape[0]} records to unprocessed data S3...")
 
-    bucket_name = 'api-football'
     s3_hook = S3Hook(aws_conn_id='aws_default')
 
-    current_timestamp = datetime.now().strftime('%Y-%m-%d')
     folders = [
         f'football_players_data/biweekly_builds/{current_timestamp}/input/',
         f'football_players_data/biweekly_builds/{current_timestamp}/output/',
@@ -101,14 +96,14 @@ def store_to_unprocessed_data_s3(**kwargs):
             s3_hook.load_bytes(
                 bytes_data=parquet_buffer.getvalue(),
                 key=s3_key,
-                bucket_name=bucket_name,
+                bucket_name=config["FOOTBALL_DATA_BUCKET"],
                 replace=True
             )
         else:
             s3_hook.load_bytes(
                 bytes_data=b'',
                 key=folder,
-                bucket_name=bucket_name,
+                bucket_name=config["FOOTBALL_DATA_BUCKET"],
                 replace=True
             )
 
@@ -126,24 +121,57 @@ default_args = {
     'retry_delay': timedelta(minutes=5),
 }
 
-dag = DAG(
+with DAG(
     'football_players_dag',
     default_args=default_args,
     description='DAG for football players stats ETL pipeline',
     schedule='0 0 * * 1 4',
     start_date=datetime(2025, 1, 1),
-)
+) as dag:
+    time_started = datetime.now().strftime('%Y-%m-%d')
+    
+    extract_football_api = PythonOperator(
+        task_id='extract_from_football_api',
+        python_callable=extract_from_football_api,
+    )
 
-start = PythonOperator(
-    task_id='extract_from_football_api',
-    dag=dag,
-    python_callable=extract_from_football_api,
-)
+    store_unprocessed_data_s3 = PythonOperator(
+        task_id='store_to_unprocessed_data_s3',
+        op_kwargs={"time_started": time_started},
+        python_callable=store_to_unprocessed_data_s3,
+    )
 
-end = PythonOperator(
-    task_id='store_to_unprocessed_data_s3',
-    dag=dag,
-    python_callable=store_to_unprocessed_data_s3,
-)
+    create_emr_serverless_app = EmrServerlessCreateApplicationOperator(
+        release_label=config["EMR_VERSION"],
+        task_id="create_emr_serverless_app",
+        aws_conn_id="aws_default",
+        job_type="SPARK",
+        wait_for_completion=True,
+        waiter_delay=60,
+        waiter_max_attempts=25,
+        config={
+            "name": "football-data",
+        }
+    )
 
-start >> end
+    start_emr_job = EmrServerlessStartJobOperator(
+        task_id="start_emr_football_players_job",
+        aws_conn_id='aws_default',
+        application_id=create_emr_serverless_app.output,
+        execution_role_arn=config["EMR_JOB_ROLE_ARN"],
+        job_driver={
+            "sparkSubmit": {
+                "entryPoint": f"s3://{config["EMR_JOB_BUCKET"]}/football_players_job.py",
+            }
+        },
+        configuration_overrides={
+            "monitoringConfiguration": {
+                "s3MonitoringConfiguration": {
+                    "logUri": f"s3://{config["FOOTBALL_DATA_BUCKET"]}/football_players_data/biweekly_builds/{time_started}/logs/"
+                }
+            }
+        },
+    )
+
+    extract_football_api >> store_unprocessed_data_s3 >> create_emr_serverless_app \
+    >> start_emr_job

@@ -1,0 +1,13 @@
+{
+    "LEAGUE_IDS": [
+        39,
+        140,
+        78,
+        61,
+        135
+    ],
+    "EMR_VERSION": "emr-7.5.0",
+    "EMR_JOB_ROLE_ARN": "arn:aws:iam::448049792856:role/aws-service-role/ops.emr-serverless.amazonaws.com/AWSServiceRoleForAmazonEMRServerless",
+    "FOOTBALL_DATA_BUCKET": "api-football",
+    "EMR_JOB_BUCKET": "emr-jobs-1"
+}
