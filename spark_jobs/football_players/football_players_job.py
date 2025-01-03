@@ -1,6 +1,34 @@
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, Column
 from pyspark.sql.functions import explode, coalesce, lit, col
+from pyspark.sql.types import StructType
+from pyspark.sql.dataframe import DataFrame
+from typing import List
 import argparse
+
+def explode_statistics(df: DataFrame) -> DataFrame:
+    return df.withColumn("stat", explode(df["statistics"])).drop("statistics")
+
+def flatten_and_rename(df: DataFrame) -> DataFrame:
+    renamed_player_columns = [
+        col(f"`{field}`").alias(field.replace(".", "_")) for field in df.columns if field != "stat"
+    ]
+
+    flatten_stat_columns = []
+
+    def flatten_and_rename_stats_columns(struct: StructType, prefix=''):
+        for field in struct.fields:
+            if isinstance(field.dataType, StructType):
+                flatten_and_rename_stats_columns(field.dataType, prefix + field.name + ".")
+            else:
+                flatten_stat_columns.append(col("stat." + prefix + field.name).alias((prefix + field.name).replace(".", "_")))
+
+    flatten_and_rename_stats_columns(df.schema["stat"].dataType)
+
+    all_columns = renamed_player_columns + flatten_stat_columns
+
+
+    return df.select(*all_columns)
+    
 
 def main():
     parser = argparse.ArgumentParser()
@@ -9,105 +37,18 @@ def main():
     parser.add_argument("--format", required=True, help="Format of the data")
     args = parser.parse_args()
 
-    spark = SparkSession.builder.appName("Football Players Transformations").getOrCreate()
-
-    # Define player fields and stats with their default values
-    players_fields = {
-        "player.id": (None, "int"),
-        "player.firstname": (None, "string"),
-        "player.lastname": (None, "string"),
-        "player.age": (None, "int"),
-        "player.nationality": (None, "string"),
-        "player.height": (None, "int"),
-        "player.weight": (None, "int"),
-        "player.injured": (False, "boolean"),
-    }
-
-    stat_fields = {
-        # Team fields
-        "team.id": (None, "int"),
-        "team.name": (None, "string"),
-        # League fields
-        "league.id": (None, "int"),
-        "league.name": (None, "string"),
-        "league.country": (None, "string"),
-        "league.season": (None, "int"),
-        # Games fields
-        "games.appearences": (0, "int"),
-        "games.lineups": (0, "int"),
-        "games.minutes": (0, "int"),
-        "games.number": (0, "int"),
-        "games.position": (None, "string"),
-        "games.rating": (0, "float"),
-        "games.captain": (False, "boolean"),
-        # Substitutes fields
-        "substitutes.in": (0, "int"),
-        "substitutes.out": (0, "int"),
-        "substitutes.bench": (0, "int"),
-        # Shots fields
-        "shots.total": (0, "int"),
-        "shots.on": (0, "int"),
-        # Goals fields
-        "goals.total": (0, "int"),
-        "goals.assists": (0, "int"),
-        # Passes fields
-        "passes.total": (0, "int"),
-        "passes.key": (0, "int"),
-        "passes.accuracy": (None, "string"),
-        # Tackles fields
-        "tackles.total": (0, "int"),
-        "tackles.blocks": (0, "int"),
-        "tackles.interceptions": (0, "int"),
-        # Duels fields
-        "duels.total": (0, "int"),
-        "duels.won": (0, "int"),
-        # Dribbles fields
-        "dribbles.attempts": (0, "int"),
-        "dribbles.success": (0, "int"),
-        # Fouls fields
-        "fouls.drawn": (0, "int"),
-        "fouls.committed": (0, "int"),
-        # Cards fields
-        "cards.yellow": (0, "int"),
-        "cards.yellowred": (0, "int"),
-        "cards.red": (0, "int"),
-        # Penalty fields
-        "penalty.won": (0, "int"),
-        "penalty.scored": (0, "int")
-    }
-
-    # Creating the stat columns with coalesce to apply default values
-    stat_columns = [
-        coalesce(f"stat.{field}", lit(default_value)).alias(field)
-        for field, (default_value, _) in stat_fields.items() if default_value is not None
-    ]
+    spark: SparkSession = SparkSession.builder.appName("Football Players Transformations").getOrCreate()
 
     # Read the input data
     df = spark.read.format(args.format).load(args.input_path)
-    df.printSchema()
 
-    # exploded_df = df.withColumn("stat", explode(df["statistics"]))
+    exploded_df = explode_statistics(df)
 
-    # # Apply coalesce for the player fields that need defaults and are not None
-    # player_columns = [
-    #     coalesce(field, lit(default_value))
-    #     for field, (default_value, _) in players_fields.items() if default_value is not None
-    # ]
+    player_data_df = flatten_and_rename(exploded_df)
 
-    # print(df.columns)
 
-    # # Create the player DataFrame selecting only the relevant fields
-    # player_df = exploded_df.select(*player_columns, *stat_columns)
+    player_data_df.printSchema()
 
-    # # Filter out rows where any field is None
-    # for field in players_fields.keys():
-    #     player_df = player_df.filter(col(field).isNotNull())
-
-    # for field in stat_fields.keys():
-    #     player_df = player_df.filter(col(field).isNotNull())
-
-    # # Write the final output
-    # player_df.write.format(args.format).mode("overwrite").save(args.output_path)
 
     spark.stop()
 
