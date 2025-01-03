@@ -12,7 +12,6 @@ def flatten_and_rename(df: DataFrame) -> DataFrame:
     renamed_player_columns = [
         col(f"`{field}`").alias(field.replace(".", "_")) for field in df.columns if field != "stat"
     ]
-
     flatten_stat_columns = []
 
     def flatten_and_rename_stats_columns(struct: StructType, prefix=''):
@@ -23,12 +22,45 @@ def flatten_and_rename(df: DataFrame) -> DataFrame:
                 flatten_stat_columns.append(col("stat." + prefix + field.name).alias((prefix + field.name).replace(".", "_")))
 
     flatten_and_rename_stats_columns(df.schema["stat"].dataType)
-
     all_columns = renamed_player_columns + flatten_stat_columns
-
-
     return df.select(*all_columns)
-    
+
+def set_default_values(df: DataFrame) -> DataFrame:
+    default_values = {
+        "boolean": False,
+        "integer": 0,
+        "long": 0,
+        "float": 0.0,
+        "double": 0.0,
+        "string": "Unknown"
+    }
+
+    defaults = {}
+    for field in df.schema.fields:
+        field_type = field.dataType.typeName()
+        if field_type in default_values:
+            defaults[field.name] = default_values[field_type]
+
+    # Use fillna to set default values
+    return df.fillna(defaults)
+
+def drop_null_required_columns(df: DataFrame) -> DataFrame:
+    required_columns = [
+        "player_id",
+        "player_firstname",
+        "player_lastname",
+        "player_age",
+        "player_nationality",
+        "player_weight",
+        "player_height",
+        "league_id",
+        "league_name",
+        "league_season",
+        "team_id",
+        "team_name",
+    ]
+
+    return df.dropna(subset=required_columns)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -39,16 +71,14 @@ def main():
 
     spark: SparkSession = SparkSession.builder.appName("Football Players Transformations").getOrCreate()
 
-    # Read the input data
     df = spark.read.format(args.format).load(args.input_path)
-
     exploded_df = explode_statistics(df)
 
     player_data_df = flatten_and_rename(exploded_df)
+    player_data_df = drop_null_required_columns(player_data_df)
+    player_data_df = set_default_values(player_data_df)
 
-
-    player_data_df.printSchema()
-
+    player_data_df.write.format(args.format).save(args.output_path)
 
     spark.stop()
 
