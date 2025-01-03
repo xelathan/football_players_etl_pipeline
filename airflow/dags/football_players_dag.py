@@ -9,6 +9,17 @@ import json
 import logging
 import pandas as pd
 
+DEFAULT_ARGS = {
+    'owner': 'airflow',
+    'depends_on_past': False,
+    'email': ['alex.t.tran@gmail.com'],
+    'email_on_failure': True,
+    'email_on_retry': True,
+    'retries': 1,
+    'retry_delay': timedelta(minutes=5),
+}
+
+# TODO: For testing purposes, please use the request library to extract data from the API
 file_path = "/opt/airflow/mock/mock_football_players"
 
 with open("/opt/airflow/config/football_players_data_config.json", 'r') as f:
@@ -20,6 +31,7 @@ def extract_from_football_api(**kwargs):
 
     players_df = pd.DataFrame()
 
+    # TODO: For testing purposes, please use the request library to extract data from the API
     for league_id in config["LEAGUE_IDS"]:
         pagination = 1
         while True:
@@ -110,20 +122,9 @@ def store_to_unprocessed_data_s3(**kwargs):
 
     logging.info('Data stored to unprocessed data S3')
 
-
-default_args = {
-    'owner': 'airflow',
-    'depends_on_past': False,
-    'email': ['alex.t.tran@gmail.com'],
-    'email_on_failure': True,
-    'email_on_retry': True,
-    'retries': 1,
-    'retry_delay': timedelta(minutes=5),
-}
-
 with DAG(
     'football_players_dag',
-    default_args=default_args,
+    default_args=DEFAULT_ARGS,
     description='DAG for football players stats ETL pipeline',
     schedule='0 0 * * 1 4',
     start_date=datetime(2025, 1, 1),
@@ -151,8 +152,22 @@ with DAG(
         waiter_max_attempts=25,
         config={
             "name": "football-data",
+            "applicationConfiguration": [
+                 {
+                    "classification": "spark-defaults",
+                    "properties": {
+                        "spark.hadoop.fs.s3.s3AccessGrants.enabled": "true",
+                        "spark.hadoop.fs.s3.s3AccessGrants.fallbackToIAM": "false",
+                    }
+                }
+            ]
         }
     )
+
+    input_path = f"s3://{config["FOOTBALL_DATA_BUCKET"]}/football_players_data/biweekly_builds/{time_started}/input/"
+    output_path = f"s3://{config["FOOTBALL_DATA_BUCKET"]}/football_players_data/biweekly_builds/{time_started}/output/"
+    logs_path = f"s3://{config["FOOTBALL_DATA_BUCKET"]}/football_players_data/biweekly_builds/{time_started}/logs/"
+    job_path = f"s3://{config["EMR_JOB_BUCKET"]}/football/football_players_job.py"
 
     start_emr_job = EmrServerlessStartJobOperator(
         task_id="start_emr_football_players_job",
@@ -161,13 +176,18 @@ with DAG(
         execution_role_arn=config["EMR_JOB_ROLE_ARN"],
         job_driver={
             "sparkSubmit": {
-                "entryPoint": f"s3://{config["EMR_JOB_BUCKET"]}/football_players_job.py",
+                "entryPoint": job_path,
+                "entryPointArguments": [
+                    "--input_path", input_path,
+                    "--output_path", output_path,
+                    "--file_format", "parquet"
+                ],
             }
         },
         configuration_overrides={
             "monitoringConfiguration": {
                 "s3MonitoringConfiguration": {
-                    "logUri": f"s3://{config["FOOTBALL_DATA_BUCKET"]}/football_players_data/biweekly_builds/{time_started}/logs/"
+                    "logUri": logs_path,
                 }
             }
         },
