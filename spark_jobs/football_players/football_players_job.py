@@ -6,9 +6,22 @@ from typing import List
 import argparse
 
 def explode_statistics(df: DataFrame) -> DataFrame:
+    """
+    Explode the statistics column to separate rows
+    Each row will contain a single statistic of a player for a given team
+    """
     return df.withColumn("stat", explode(df["statistics"])).drop("statistics")
 
 def flatten_and_rename(df: DataFrame) -> DataFrame:
+    """
+    Flatten the DataFrame and rename the columns
+    
+    Player columns will be renamed to player_<column_name>
+    Statistic columns parsed recursively and renamed to previous_name minus the stat. prefix
+    Statistic field flattening will be done recursively
+
+    All . in the column names will be replaced with _
+    """
     renamed_player_columns = [
         col(f"`{field}`").alias(field.replace(".", "_")) for field in df.columns if field != "stat"
     ]
@@ -26,6 +39,11 @@ def flatten_and_rename(df: DataFrame) -> DataFrame:
     return df.select(*all_columns)
 
 def set_default_values(df: DataFrame) -> DataFrame:
+    """
+    Set default values for missing fields
+    Must be called after dropping null values
+    """
+
     default_values = {
         "boolean": False,
         "integer": 0,
@@ -41,10 +59,13 @@ def set_default_values(df: DataFrame) -> DataFrame:
         if field_type in default_values:
             defaults[field.name] = default_values[field_type]
 
-    # Use fillna to set default values
     return df.fillna(defaults)
 
 def drop_null_required_columns(df: DataFrame) -> DataFrame:
+    """
+    Drop rows with null values in required columns
+    """
+
     required_columns = [
         "player_id",
         "player_firstname",
