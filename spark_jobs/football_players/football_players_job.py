@@ -83,6 +83,14 @@ def drop_null_required_columns(df: DataFrame) -> DataFrame:
 
     return df.dropna(subset=required_columns)
 
+def remove_duplicates(df: DataFrame) -> DataFrame:
+    """
+    Remove duplicate rows
+
+    Qualifies a row as duplicate if player_id, team_id and league_id are the same
+    """
+    return df.dropDuplicates(["player_id", "team_id", "league_id"])
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-path", required=True, help="Path to the input data")
@@ -93,11 +101,12 @@ def main():
     spark: SparkSession = SparkSession.builder.appName("Football Players Transformations").getOrCreate()
 
     df = spark.read.format(args.format).load(args.input_path)
+    
     exploded_df = explode_statistics(df)
-
     player_data_df = flatten_and_rename(exploded_df)
     player_data_df = drop_null_required_columns(player_data_df)
     player_data_df = set_default_values(player_data_df)
+    player_data_df = remove_duplicates(player_data_df)
 
     player_data_df.write.format(args.format).save(args.output_path)
 

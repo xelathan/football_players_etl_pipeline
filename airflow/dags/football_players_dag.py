@@ -1,6 +1,6 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.providers.amazon.aws.operators.emr import EmrServerlessCreateApplicationOperator, EmrServerlessStartJobOperator
+from airflow.providers.amazon.aws.operators.emr import EmrServerlessCreateApplicationOperator, EmrServerlessStartJobOperator, EmrServerlessDeleteApplicationOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -193,5 +193,11 @@ with DAG(
         },
     )
 
+    delete_emr_serverless_app = EmrServerlessDeleteApplicationOperator(
+        task_id="delete_emr_serverless_app",
+        application_id=create_emr_serverless_app.output,
+        aws_conn_id="aws_default",
+    )
+
     extract_football_api >> store_unprocessed_data_s3 >> create_emr_serverless_app \
-    >> start_emr_job
+    >> start_emr_job >> delete_emr_serverless_app
