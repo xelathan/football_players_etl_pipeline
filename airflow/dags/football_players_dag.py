@@ -12,9 +12,6 @@ import pandas as pd
 DEFAULT_ARGS = {
     'owner': 'airflow',
     'depends_on_past': False,
-    'email': ['alex.t.tran@gmail.com'],
-    'email_on_failure': True,
-    'email_on_retry': True,
     'retries': 1,
     'retry_delay': timedelta(minutes=5),
 }
@@ -152,15 +149,15 @@ with DAG(
         waiter_max_attempts=25,
         config={
             "name": "football-data",
-            "applicationConfiguration": [
+            "runtimeConfiguration": [
                  {
                     "classification": "spark-defaults",
                     "properties": {
-                        "spark.hadoop.fs.s3.s3AccessGrants.enabled": "true",
-                        "spark.hadoop.fs.s3.s3AccessGrants.fallbackToIAM": "false",
+                        "spark.hadoop.fs.s3a.s3AccessGrants.enabled": "true",
+                        "spark.hadoop.fs.s3a.s3AccessGrants.fallbackToIAM": "false",
                     }
                 }
-            ]
+            ],
         }
     )
 
@@ -178,10 +175,10 @@ with DAG(
             "sparkSubmit": {
                 "entryPoint": job_path,
                 "entryPointArguments": [
-                    "--input_path", input_path,
-                    "--output_path", output_path,
-                    "--file_format", "parquet"
-                ],
+                    "--input-path", input_path,
+                    "--output-path", output_path,
+                    "--format", "parquet"
+                ]
             }
         },
         configuration_overrides={
