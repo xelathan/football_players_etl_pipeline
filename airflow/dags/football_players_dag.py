@@ -2,7 +2,8 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.amazon.aws.operators.emr import EmrServerlessCreateApplicationOperator, EmrServerlessStartJobOperator, EmrServerlessDeleteApplicationOperator
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from datetime import datetime, timedelta
+from airflow.utils.dates import datetime, timedelta
+from airflow.providers.slack.operators.slack import SlackAPIPostOperator
 from io import BytesIO
 
 import json
@@ -71,7 +72,10 @@ def extract_from_football_api(**kwargs):
             except Exception as e:
                 logging.error(f"Error: {data['errors']}")
                 raise e
-    logging.info(f"Extracted {players_df.shape[0]} records from football API")
+
+    num_records = players_df.shape[0]
+    logging.info(f"Extracted {num_records} records from football API")
+    kwargs['ti'].xcom_push(key='num_records', value=num_records)
 
     return players_df
 
@@ -196,5 +200,53 @@ with DAG(
         aws_conn_id="aws_default",
     )
 
+    slack_notification = SlackAPIPostOperator(
+        task_id='slack_notification',
+        slack_conn_id='slack_conn',
+        channel="#general",
+        blocks=[
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "✅ Football Player Stats ETL Pipeline Completed! ✅",
+                    "emoji": True,
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        "DAG: *{{ dag.dag_id }}* has successfully completed for *{{ ts }}*:\n\n"
+                        "• *Records Processed:* {{ task_instance.xcom_pull(task_ids='extract_from_football_api', key='num_records') }}\n"
+                        "• *Data Source:* *<https://www.api-football.com/|Football API>*\n"
+                        "• *Transformed Data Location:* *<https://s3.console.aws.amazon.com/|S3 Bucket>*\n"
+                        "• *Loaded into:* *<https://console.aws.amazon.com/redshift/|Amazon Redshift>*\n\n"
+                        "For details, visit the *<https://console.aws.amazon.com/mwaa|Apache Airflow>* dashboard on MWAA."
+                    ),
+                },
+                "accessory": {
+                    "type": "image",
+                    "image_url": "https://cdn-icons-png.flaticon.com/512/5438/5438899.png",  # Replace with your image URL
+                    "alt_text": "Football Icon",
+                },
+            },
+            {
+                "type": "divider",
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": "Triggered by *Apache Airflow*. Data updated on *{{ ds }}*.",
+                    }
+                ],
+            },
+        ],
+        text=":white_check_mark: Football Player Stats ETL Pipeline DAG {{ ti.dag_id }}" +  f"successfully completed for {time_started}! :white_check_mark:",
+    )
+
     extract_football_api >> store_unprocessed_data_s3 >> create_emr_serverless_app \
-    >> start_emr_job >> delete_emr_serverless_app
+    >> start_emr_job >> delete_emr_serverless_app >> slack_notification
