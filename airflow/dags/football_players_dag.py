@@ -218,7 +218,7 @@ with DAG(
                 "text": {
                     "type": "mrkdwn",
                     "text": (
-                        "DAG: *{{ dag.dag_id }}* has successfully completed for *{{ ts }}*:\n\n"
+                        "DAG: *{{ dag.dag_id }}* has successfully completed:\n\n"
                         "• *Records Processed:* {{ task_instance.xcom_pull(task_ids='extract_from_football_api', key='num_records') }}\n"
                         "• *Data Source:* *<https://www.api-football.com/|Football API>*\n"
                         "• *Transformed Data Location:* *<https://s3.console.aws.amazon.com/|S3 Bucket>*\n"
