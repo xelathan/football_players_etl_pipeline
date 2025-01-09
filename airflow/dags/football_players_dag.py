@@ -1,10 +1,9 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 from airflow.providers.amazon.aws.operators.emr import EmrServerlessCreateApplicationOperator, EmrServerlessStartJobOperator, EmrServerlessDeleteApplicationOperator
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
+from airflow.providers.amazon.aws.transfers.s3_to_sql import S3ToSqlOperator, S3Hook
 from airflow.utils.dates import datetime, timedelta
 from airflow.utils.state import State
-from airflow.providers.slack.operators.slack import SlackAPIPostOperator
 from io import BytesIO
 
 import json
@@ -80,10 +79,7 @@ def extract_from_football_api(**kwargs):
 
     return players_df
 
-
-
-
-def store_to_unprocessed_data_s3(**kwargs):
+def store_to_unprocessed_records_s3(**kwargs):
     ti = kwargs['ti']
     current_timestamp = kwargs['time_started']
 
@@ -123,6 +119,26 @@ def store_to_unprocessed_data_s3(**kwargs):
 
 
     logging.info('Data stored to unprocessed data S3')
+
+def parquet_parser(filepath):
+    """
+    Parser function for S3ToSqlOperator to handle parquet files.
+    Args:
+        filepath: Path to the parquet file in S3 (downloaded to local temp storage by operator)
+    Returns:
+        Iterator of rows from the parquet file
+    """
+    # Read parquet file
+    table = pd.read_table(filepath)
+    df = table.to_pandas()
+    
+    # Get column names for dictionary keys
+    columns = df.columns.tolist()
+    
+    # Convert DataFrame rows to dictionaries
+    for _, row in df.iterrows():
+        # Create a dictionary for each row using column names as keys
+        yield dict(zip(columns, row.tolist()))
 
 def get_root_failed_task(context):
     """
@@ -353,10 +369,10 @@ with DAG(
         python_callable=extract_from_football_api,
     )
 
-    store_unprocessed_data_s3 = PythonOperator(
-        task_id='store_to_unprocessed_data_s3',
+    store_unprocessed_records_s3 = PythonOperator(
+        task_id='store_to_unprocessed_records_s3',
         op_kwargs={"time_started": time_started},
-        python_callable=store_to_unprocessed_data_s3,
+        python_callable=store_to_unprocessed_records_s3,
     )
 
     create_emr_serverless_app = EmrServerlessCreateApplicationOperator(
@@ -416,5 +432,19 @@ with DAG(
         aws_conn_id="aws_default",
     )
 
-    extract_football_api >> store_unprocessed_data_s3 >> create_emr_serverless_app \
-    >> start_emr_job >> delete_emr_serverless_app
+    load_processed_records_to_postgres = S3ToSqlOperator(
+        task_id="load_to_rds",
+        s3_bucket=config["FOOTBALL_DATA_BUCKET"],
+        s3_key="",
+        schema='public',
+        aws_conn_id="aws_default",
+        table="football_players_data",
+        sql_conn_id="aws_rds_postgres_conn",
+        column_list=[],
+        parser=parquet_parser,
+    )
+    
+
+
+    extract_football_api >> store_unprocessed_records_s3 >> create_emr_serverless_app \
+    >> start_emr_job >> delete_emr_serverless_app >> load_processed_records_to_postgres

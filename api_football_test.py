@@ -16,9 +16,18 @@ headers = {
     'x-rapidapi-key': config["API_FOOTBALL_KEY"]
     }
 
-conn.request("GET", "/teams?league=39&season=2021", headers=headers)
+conn.request("GET", "/players?league=39&season=2023", headers=headers)
 
 res = conn.getresponse()
 data = res.read()
 
-print(data.decode("utf-8"))
+json_data = json.loads(data.decode("utf-8"))
+
+# Specify the file path where you want to save the data
+output_file_path = "football_players_data.json"
+
+# Write the JSON data into a file
+with open(output_file_path, "w") as json_file:
+    json.dump(json_data, json_file, indent=4)
+
+print(f"Data saved to {output_file_path}")
