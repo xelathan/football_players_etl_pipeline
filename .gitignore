@@ -9,4 +9,4 @@ standalone_admin_password.txt
 webserver_config.py
 airflow/config/
 airflow/dags/__pycache__
-football_players_data_config.json
+football_players_data.json
