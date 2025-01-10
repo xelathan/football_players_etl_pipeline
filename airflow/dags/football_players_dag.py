@@ -120,6 +120,21 @@ def store_to_unprocessed_records_s3(**kwargs):
 
     logging.info('Data stored to unprocessed data S3')
 
+def get_processed_file_path(**kwargs):
+    current_timestamp = kwargs['time_started']
+    s3_hook = S3Hook(aws_conn_id='aws_default')
+
+    parquet_files = s3_hook.list_keys(
+        Bucket=config["FOOTBALL_DATA_BUCKET"],
+        Prefix=f"football_players_data/biweekly_builds/{current_timestamp}/output/*.parquet",
+        apply_wildcard=True,
+    )
+
+    if not parquet_files:
+        raise Exception("No matching parquet file found")
+
+    return parquet_files[0]
+
 def parquet_parser(filepath):
     """
     Parser function for S3ToSqlOperator to handle parquet files.
@@ -432,10 +447,16 @@ with DAG(
         aws_conn_id="aws_default",
     )
 
+    get_processed_file_path_name = PythonOperator(
+        task_id="get_processed_file_path_name",
+        op_kwargs={"time_started": time_started},
+        python_callable=get_processed_file_path,
+    )
+
     load_processed_records_to_postgres = S3ToSqlOperator(
         task_id="load_to_rds",
         s3_bucket=config["FOOTBALL_DATA_BUCKET"],
-        s3_key="",
+        s3_key="{{ ti.xcom_pull(task_ids='get_processed_file_path_name') }}",
         schema='public',
         aws_conn_id="aws_default",
         table="football_players_data",
@@ -444,7 +465,6 @@ with DAG(
         parser=parquet_parser,
     )
     
-
-
     extract_football_api >> store_unprocessed_records_s3 >> create_emr_serverless_app \
-    >> start_emr_job >> delete_emr_serverless_app >> load_processed_records_to_postgres
+    >> start_emr_job >> delete_emr_serverless_app >> get_processed_file_path_name \
+    >> load_processed_records_to_postgres
