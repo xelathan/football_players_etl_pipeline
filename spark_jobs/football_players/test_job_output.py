@@ -9,7 +9,7 @@ def main():
         table = pq.read_table(directory[0])
         data : pd.DataFrame = table.to_pandas()
 
-        print(data.head())
+        print(data.shape[0])
 
 if __name__ == "__main__":
     main()

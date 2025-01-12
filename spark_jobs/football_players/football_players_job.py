@@ -1,7 +1,10 @@
-from pyspark.sql import SparkSession, Column
-from pyspark.sql.functions import explode, coalesce, lit, col
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.functions import explode, col
 from pyspark.sql.types import StructType
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.types import FloatType
+
 import logging
 import argparse
 
@@ -96,7 +99,26 @@ def remove_duplicates(df: DataFrame) -> DataFrame:
     """
     logging.info("Removing duplicate rows")
 
-    return df.dropDuplicates(["player_id", "team_id", "league_id"])
+    return df.dropDuplicates(["player_id", "team_id", "league_id", "league_season"])
+    
+def convert_percentage_to_decimal(df, column_name):
+    """
+    Converts percentage strings (e.g., "90%", "100%") to decimal values (0.9, 1.0)
+    
+    Parameters:
+    df (DataFrame): Input PySpark DataFrame
+    column_name (str): Name of the column containing percentage strings
+    
+    Returns:
+    DataFrame: DataFrame with transformed column
+    """
+    return df.withColumn(
+        column_name,
+        F.when(
+            F.col(column_name).isNotNull(),
+            F.regexp_replace(F.col(column_name), "%", "").cast(FloatType()) / 100
+        ).otherwise(None)
+    )
 
 def main():
     logging.info("Starting Football Players Transformations")
@@ -117,6 +139,7 @@ def main():
     player_data_df = drop_null_required_columns(player_data_df)
     player_data_df = set_default_values(player_data_df)
     player_data_df = remove_duplicates(player_data_df)
+    player_data_df = convert_percentage_to_decimal(player_data_df, "passes_accuracy")
 
     player_data_df.write.mode("overwrite").format(args.format).save(args.output_path)
 

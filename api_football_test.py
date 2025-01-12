@@ -14,9 +14,9 @@ conn = http.client.HTTPSConnection("v3.football.api-sports.io", context=context)
 headers = {
     'x-rapidapi-host': "v3.football.api-sports.io",
     'x-rapidapi-key': config["API_FOOTBALL_KEY"]
-    }
+}
 
-conn.request("GET", "/players?league=39&season=2023", headers=headers)
+conn.request("GET", "/players?league=39&season=2023&page=2", headers=headers)
 
 res = conn.getresponse()
 data = res.read()

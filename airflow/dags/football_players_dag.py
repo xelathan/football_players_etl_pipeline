@@ -1,5 +1,6 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.providers.common.sql.operators.sql import SQLExecuteQueryOperator
 from airflow.providers.amazon.aws.operators.emr import EmrServerlessCreateApplicationOperator, EmrServerlessStartJobOperator, EmrServerlessDeleteApplicationOperator
 from airflow.providers.amazon.aws.transfers.s3_to_sql import S3ToSqlOperator, S3Hook
 from airflow.utils.dates import datetime, timedelta
@@ -10,6 +11,8 @@ import json
 import logging
 import pandas as pd
 import requests
+import ssl
+import http
 
 DEFAULT_ARGS = {
     'owner': 'airflow',
@@ -29,14 +32,26 @@ def extract_from_football_api(**kwargs):
 
     players_df = pd.DataFrame()
 
+    context = ssl._create_unverified_context()
+    conn = http.client.HTTPSConnection("v3.football.api-sports.io", context=context)
+    headers = {
+        'x-rapidapi-host': "v3.football.api-sports.io",
+        'x-rapidapi-key': config["API_FOOTBALL_KEY"]
+    }
+
     # TODO: For testing purposes, please use the request library to extract data from the API
     for league_id in config["LEAGUE_IDS"]:
         pagination = 1
         while True:
             try:
                 # obtain data
-                with open(f"{file_path}_{pagination}.json", 'r') as f:
-                    data = json.load(f)
+                # with open(f"{file_path}_{pagination}.json", 'r') as f:
+                #     data = json.load(f)
+
+                conn.request("GET", f"/players?league={league_id}&season={config['SEASON']}&page={pagination}", headers=headers)
+                res = conn.getresponse()
+                json_data = res.read()
+                data = json.loads(json_data.decode("utf-8"))
                 
                 # handle error
                 if 'errors' in data and len(data['errors']) > 0:
@@ -125,8 +140,9 @@ def get_processed_file_path(**kwargs):
     s3_hook = S3Hook(aws_conn_id='aws_default')
 
     parquet_files = s3_hook.list_keys(
-        Bucket=config["FOOTBALL_DATA_BUCKET"],
-        Prefix=f"football_players_data/biweekly_builds/{current_timestamp}/output/*.parquet",
+        bucket_name=config["FOOTBALL_DATA_BUCKET"],
+        prefix=f"football_players_data/biweekly_builds/{current_timestamp}/output/*.parquet",
+        delimiter="/",
         apply_wildcard=True,
     )
 
@@ -143,17 +159,10 @@ def parquet_parser(filepath):
     Returns:
         Iterator of rows from the parquet file
     """
-    # Read parquet file
-    table = pd.read_table(filepath)
-    df = table.to_pandas()
-    
-    # Get column names for dictionary keys
-    columns = df.columns.tolist()
-    
-    # Convert DataFrame rows to dictionaries
-    for _, row in df.iterrows():
-        # Create a dictionary for each row using column names as keys
-        yield dict(zip(columns, row.tolist()))
+    df = pd.read_parquet(filepath)
+        
+    for row in df.values:
+        yield row.tolist()
 
 def get_root_failed_task(context):
     """
@@ -453,13 +462,84 @@ with DAG(
         python_callable=get_processed_file_path,
     )
 
+    create_table_if_needed = SQLExecuteQueryOperator(
+        task_id='create_table_if_needed',
+        sql="""
+            CREATE TABLE IF NOT EXISTS {{ params.table_name }} (
+                player_id SERIAL PRIMARY KEY,
+                player_name VARCHAR(255),
+                player_firstname VARCHAR(255),
+                player_lastname VARCHAR(255),
+                player_age INT,
+                player_birth_date VARCHAR(255),
+                player_birth_place VARCHAR(255),
+                player_birth_country VARCHAR(255),
+                player_nationality VARCHAR(255),
+                player_height VARCHAR(255),
+                player_weight VARCHAR(255),
+                player_injured BOOLEAN,
+                player_photo VARCHAR(255),
+                cards_red INT,
+                cards_yellow INT,
+                cards_yellowred INT,
+                dribbles_attempts FLOAT,
+                dribbles_past INT,
+                dribbles_success FLOAT,
+                duels_total FLOAT,
+                duels_won FLOAT,
+                fouls_committed FLOAT,
+                fouls_drawn FLOAT,
+                games_appearences INT,
+                games_captain BOOLEAN,
+                games_lineups INT,
+                games_minutes INT,
+                games_number FLOAT,
+                games_position VARCHAR(255),
+                games_rating VARCHAR(255),
+                goals_assists FLOAT,
+                goals_conceded INT,
+                goals_saves INT,
+                goals_total INT,
+                league_country VARCHAR(255),
+                league_flag VARCHAR(255),
+                league_id INT,
+                league_logo VARCHAR(255),
+                league_name VARCHAR(255),
+                league_season INT,
+                passes_accuracy FLOAT,
+                passes_key FLOAT,
+                passes_total FLOAT,
+                penalty_commited FLOAT,
+                penalty_missed FLOAT,
+                penalty_saved FLOAT,
+                penalty_scored FLOAT,
+                penalty_won FLOAT,
+                shots_on FLOAT,
+                shots_total FLOAT,
+                substitutes_bench INT,
+                substitutes_in INT,
+                substitutes_out INT,
+                tackles_blocks FLOAT,
+                tackles_interceptions FLOAT,
+                tackles_total FLOAT,
+                team_id INT,
+                team_logo VARCHAR(255),
+                team_name VARCHAR(255),
+                CONSTRAINT unique_player_team_league_season UNIQUE (player_id, team_id, league_id, league_season)
+            );
+          """,
+          params={"table_name": f"football_players_data_{config["SEASON"]}"},
+          conn_id="aws_rds_postgres_conn",
+          show_return_value_in_logs=True,
+    )
+
     load_processed_records_to_postgres = S3ToSqlOperator(
         task_id="load_to_rds",
         s3_bucket=config["FOOTBALL_DATA_BUCKET"],
         s3_key="{{ ti.xcom_pull(task_ids='get_processed_file_path_name') }}",
         schema='public',
         aws_conn_id="aws_default",
-        table="football_players_data",
+        table=f"football_players_data_{config['SEASON']}",
         sql_conn_id="aws_rds_postgres_conn",
         column_list=[],
         parser=parquet_parser,
@@ -467,4 +547,4 @@ with DAG(
     
     extract_football_api >> store_unprocessed_records_s3 >> create_emr_serverless_app \
     >> start_emr_job >> delete_emr_serverless_app >> get_processed_file_path_name \
-    >> load_processed_records_to_postgres
+    >> create_table_if_needed >> load_processed_records_to_postgres
