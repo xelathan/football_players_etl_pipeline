@@ -8,6 +8,8 @@ from pyspark.sql.types import FloatType
 import logging
 import argparse
 
+# TODO: Change player_rating to float, change player height and weight to ints (cm) and (kg)
+
 def explode_statistics(df: DataFrame) -> DataFrame:
     """
     Explode the statistics column to separate rows
