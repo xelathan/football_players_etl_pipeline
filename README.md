@@ -4,6 +4,8 @@
 
 This project implements an ETL pipeline to extract, transform, and load football player statistics for the current season. The data pipeline leverages various AWS services, Apache Airflow for orchestration, and Apache Spark for data transformations. The processed data is stored in an AWS RDS PostgreSQL database for further analysis.
 
+![Pipeline Architecture](pipeline_architecture.jpg)
+
 ---
 
 ## Architecture
@@ -12,13 +14,13 @@ This project implements an ETL pipeline to extract, transform, and load football
 
 1. **Extract**:
    - Football player statistics are fetched from a football API using **pandas**.
-   - Extracted data is stored as raw JSON in an Amazon S3 bucket.
+   - Extracted data is stored as parquet files in an Amazon S3 input folder.
 
 2. **Transform**:
-   - An **Amazon EMR Serverless** Spark application processes and transforms the raw JSON data into a cleaned, enriched format.
+   - An **Amazon EMR Serverless** Spark application processes and transforms the raw parquet data into a cleaned, enriched format.
 
 3. **Load**:
-   - The transformed data is uploaded back to the S3 bucket.
+   - The transformed data is uploaded back to the S3 bucket in an output folder and logs uploaded to logs folder.
    - Data is then ingested into an **AWS RDS PostgreSQL** database for querying and analysis.
 
 4. **Orchestration**:
@@ -51,11 +53,11 @@ This project implements an ETL pipeline to extract, transform, and load football
 ## Prerequisites
 
 1. **Python Environment**:
-   - Install Python 3.9 or later.
-   - Required libraries:
+   - Install Python 3.10 or later.
+   - Install required libraries:
 
      ```bash
-     pip install pandas boto3 apache-airflow psycopg2
+     pip install -r requirements.txt
      ```
 
 2. **AWS Account**:
@@ -81,5 +83,3 @@ This project implements an ETL pipeline to extract, transform, and load football
    export RDS_USER=your-database-username
    export RDS_PASSWORD=your-database-password
    export RDS_DATABASE=your-database-name
-
-![Pipeline Architecture](pipeline_architecture.jpg)
