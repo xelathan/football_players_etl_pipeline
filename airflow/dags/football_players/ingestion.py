@@ -55,6 +55,7 @@ def extract_from_football_api(**kwargs):
                 
                 # handle error
                 if 'errors' in data and len(data['errors']) > 0:
+                    logging.info(data['errors'])
                     break
                 
                 # handle pagination
@@ -92,6 +93,9 @@ def extract_from_football_api(**kwargs):
                 raise e
 
     num_records = players_df.shape[0]
+    if num_records == 0:
+        raise Exception("No records found")
+    
     logging.info(f"Extracted {num_records} records from football API")
     kwargs['ti'].xcom_push(key='num_records', value=num_records)
 
