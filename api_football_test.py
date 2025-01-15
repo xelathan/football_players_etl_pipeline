@@ -2,7 +2,7 @@ import http.client
 import json
 import ssl
 
-CONFIG_FILE_PATH = "airflow/config/football_players_data_config.json"
+CONFIG_FILE_PATH = "airflow/dags/football_players/football_players_data_config.json"
 
 with open(CONFIG_FILE_PATH, "r") as f:
     config = json.load(f)

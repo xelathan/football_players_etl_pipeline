@@ -7,6 +7,6 @@ airflow.cfg
 airflow.db
 standalone_admin_password.txt
 webserver_config.py
-airflow/config/
-airflow/dags/__pycache__
+airflow/dags/football_players/football_players_data_config.json
 football_players_data.json
+__pycache__/
